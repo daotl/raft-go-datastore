@@ -5,19 +5,17 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/daotl/go-datastore"
 	"github.com/daotl/go-datastore/key"
+	"github.com/daotl/go-ds-leveldb"
 	"github.com/hashicorp/raft"
 )
 
 func testStore(t testing.TB) *Store {
-	ds, err := datastore.NewMapDatastore(key.KeyTypeBytes)
-	store := NewStore(ds)
-
+	ds, err := leveldb.NewDatastore(t.TempDir(), key.KeyTypeBytes, nil)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
-
+	store := NewStore(ds)
 	return store
 }
 
