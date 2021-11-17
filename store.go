@@ -76,24 +76,12 @@ func (s *Store) FirstIndex() (uint64, error) {
 	return bytesToUint64(res.Key.TrimPrefix(logPrefixKey).Bytes()), nil
 }
 
-type reverseOrder struct {
-}
-
-func (o reverseOrder) Compare(entry dsq.Entry, entry2 dsq.Entry) int {
-	if entry.Key.Less(entry2.Key) {
-		return 1
-	} else if entry2.Key.Less(entry.Key) {
-		return -1
-	}
-	return 0
-}
-
 // LastIndex returns the last index written. 0 for no entries.
 func (s *Store) LastIndex() (uint64, error) {
 	results, err := s.ds.Query(context.Background(), dsq.Query{
 		Prefix:   logPrefixKey,
 		KeysOnly: true,
-		Orders:   []dsq.Order{reverseOrder{}},
+		Orders:   []dsq.Order{dsq.OrderByKeyDescending{}},
 	})
 	defer results.Close()
 	if err != nil {
