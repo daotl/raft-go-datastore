@@ -5,9 +5,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/hashicorp/raft"
+
 	"github.com/daotl/go-datastore/key"
 	"github.com/daotl/go-ds-leveldb"
-	"github.com/hashicorp/raft"
 )
 
 func testStore(t testing.TB) *Store {

@@ -3,14 +3,17 @@ package raftds
 import (
 	"context"
 
-	"github.com/daotl/go-datastore"
+	"github.com/hashicorp/raft"
+
+	datastore "github.com/daotl/go-datastore"
 	dskey "github.com/daotl/go-datastore/key"
 	dsq "github.com/daotl/go-datastore/query"
-	"github.com/hashicorp/raft"
 )
 
-var logPrefixKey = dskey.NewBytesKey([]byte("l"))
-var stablePrefixKey = dskey.NewBytesKey([]byte("s"))
+var logPrefixKey = dskey.NewBytesKeyFromString("l")
+var stablePrefixKey = dskey.NewBytesKeyFromString("s")
+
+var bg = context.Background()
 
 // Store can be used as a LogStore and StableStore for Raft.
 type Store struct {
@@ -32,11 +35,11 @@ func getLogKey(idx uint64) dskey.Key {
 // --------------------- StableStore------------------------
 
 func (s *Store) Set(key []byte, val []byte) error {
-	return s.ds.Put(context.Background(), getStableKey(key), val)
+	return s.ds.Put(bg, getStableKey(key), val)
 }
 
 func (s *Store) Get(key []byte) ([]byte, error) {
-	return s.ds.Get(context.Background(), getStableKey(key))
+	return s.ds.Get(bg, getStableKey(key))
 }
 
 func (s *Store) SetUint64(key []byte, val uint64) error {
@@ -57,7 +60,7 @@ func (s *Store) GetUint64(key []byte) (uint64, error) {
 
 // FirstIndex returns the first index written. 0 for no entries.
 func (s *Store) FirstIndex() (uint64, error) {
-	results, err := s.ds.Query(context.Background(), dsq.Query{
+	results, err := s.ds.Query(bg, dsq.Query{
 		Prefix:   logPrefixKey,
 		KeysOnly: true,
 	})
@@ -78,7 +81,7 @@ func (s *Store) FirstIndex() (uint64, error) {
 
 // LastIndex returns the last index written. 0 for no entries.
 func (s *Store) LastIndex() (uint64, error) {
-	results, err := s.ds.Query(context.Background(), dsq.Query{
+	results, err := s.ds.Query(bg, dsq.Query{
 		Prefix:   logPrefixKey,
 		KeysOnly: true,
 		Orders:   []dsq.Order{dsq.OrderByKeyDescending{}},
@@ -99,7 +102,7 @@ func (s *Store) LastIndex() (uint64, error) {
 }
 
 func (s *Store) GetLog(index uint64, log *raft.Log) error {
-	val, err := s.ds.Get(context.Background(), getLogKey(index))
+	val, err := s.ds.Get(bg, getLogKey(index))
 	if err != nil {
 		return err
 	}
@@ -118,7 +121,7 @@ func (s *Store) StoreLogs(logs []*raft.Log) error {
 			return err
 		}
 
-		if err := s.ds.Put(context.Background(), key, val.Bytes()); err != nil {
+		if err := s.ds.Put(bg, key, val.Bytes()); err != nil {
 			return err
 		}
 	}
@@ -127,7 +130,7 @@ func (s *Store) StoreLogs(logs []*raft.Log) error {
 
 // DeleteRange deletes a range of log entries. The range is inclusive.
 func (s *Store) DeleteRange(min, max uint64) error {
-	results, err := s.ds.Query(context.Background(), dsq.Query{
+	results, err := s.ds.Query(bg, dsq.Query{
 		Prefix:   logPrefixKey,
 		KeysOnly: true,
 		Range: dsq.Range{
@@ -143,7 +146,7 @@ func (s *Store) DeleteRange(min, max uint64) error {
 		if result.Error != nil {
 			return err
 		}
-		s.ds.Delete(context.Background(), result.Key)
+		s.ds.Delete(bg, result.Key)
 	}
 	return nil
 }
