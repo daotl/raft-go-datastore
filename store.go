@@ -5,7 +5,7 @@ import (
 
 	"github.com/hashicorp/raft"
 
-	datastore "github.com/daotl/go-datastore"
+	"github.com/daotl/go-datastore"
 	dskey "github.com/daotl/go-datastore/key"
 	dsq "github.com/daotl/go-datastore/query"
 )
@@ -17,11 +17,19 @@ var bg = context.Background()
 
 // Store can be used as a LogStore and StableStore for Raft.
 type Store struct {
-	ds datastore.Datastore
+	ds           datastore.Datastore
+	txnSupported bool
+	txnDs        datastore.TxnDatastore
 }
 
 func NewStore(ds datastore.Datastore) *Store {
-	return &Store{ds: ds}
+	txnDs, ok := ds.(datastore.TxnDatastore)
+	return &Store{ds: ds, txnSupported: ok, txnDs: txnDs}
+}
+
+type readWrite interface {
+	datastore.Read
+	datastore.Write
 }
 
 func getStableKey(k []byte) dskey.Key {
@@ -114,6 +122,17 @@ func (s *Store) StoreLog(log *raft.Log) error {
 }
 
 func (s *Store) StoreLogs(logs []*raft.Log) error {
+	var w datastore.Write
+	if s.txnSupported {
+		txn, err := s.txnDs.NewTransaction(bg, false)
+		if err != nil {
+			return err
+		}
+		defer txn.Discard(bg)
+		w = txn
+	} else {
+		w = s.ds
+	}
 	for _, log := range logs {
 		key := getLogKey(log.Index)
 		val, err := encodeMsgPack(log)
@@ -121,7 +140,14 @@ func (s *Store) StoreLogs(logs []*raft.Log) error {
 			return err
 		}
 
-		if err := s.ds.Put(bg, key, val.Bytes()); err != nil {
+		if err := w.Put(bg, key, val.Bytes()); err != nil {
+			return err
+		}
+	}
+
+	if s.txnSupported {
+		txn := w.(datastore.Txn)
+		if err := txn.Commit(bg); err != nil {
 			return err
 		}
 	}
@@ -130,7 +156,18 @@ func (s *Store) StoreLogs(logs []*raft.Log) error {
 
 // DeleteRange deletes a range of log entries. The range is inclusive.
 func (s *Store) DeleteRange(min, max uint64) error {
-	results, err := s.ds.Query(bg, dsq.Query{
+	var rw readWrite
+	if s.txnSupported {
+		txn, err := s.txnDs.NewTransaction(bg, false)
+		if err != nil {
+			return err
+		}
+		defer txn.Discard(bg)
+		rw = txn
+	} else {
+		rw = s.ds
+	}
+	results, err := rw.Query(bg, dsq.Query{
 		Prefix:   logPrefixKey,
 		KeysOnly: true,
 		Range: dsq.Range{
@@ -146,8 +183,19 @@ func (s *Store) DeleteRange(min, max uint64) error {
 		if result.Error != nil {
 			return err
 		}
-		s.ds.Delete(bg, result.Key)
+		err := rw.Delete(bg, result.Key)
+		if err != nil {
+			return err
+		}
 	}
+	if s.txnSupported {
+		txn := rw.(datastore.Txn)
+		err = txn.Commit(bg)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

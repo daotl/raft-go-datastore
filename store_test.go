@@ -2,17 +2,21 @@ package raftds
 
 import (
 	"bytes"
+	"path/filepath"
 	"reflect"
 	"testing"
 
+	boltds "github.com/daotl/go-ds-bbolt"
 	"github.com/hashicorp/raft"
 
 	"github.com/daotl/go-datastore/key"
-	"github.com/daotl/go-ds-leveldb"
 )
 
 func testStore(t testing.TB) *Store {
-	ds, err := leveldb.NewDatastore(t.TempDir(), key.KeyTypeBytes, nil)
+	//ds, err := leveldb.NewDatastore(t.TempDir(), key.KeyTypeBytes, nil)
+
+	tmpFile := filepath.Join(t.TempDir(), "bolt")
+	ds, err := boltds.NewDatastore(tmpFile, nil, nil, key.KeyTypeBytes)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
